@@ -15,7 +15,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Get latest setting (most recent)
+
 router.get('/', async (req, res) => {
   try {
     const latest = await Setting.findOne().sort({ createdAt: -1 });
