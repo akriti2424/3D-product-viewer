@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import ThreeViewer from "./components/ThreeViewer";
 import UploadControls from "./components/uploadControls";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://threed-product-viewer-1.onrender.com";
+
 
 export default function App() {
   const [localPreview, setLocalPreview] = useState(null);
