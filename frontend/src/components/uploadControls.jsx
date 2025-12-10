@@ -13,6 +13,8 @@ export default function UploadControls({
 }) {
 
   const handleFileChange = (e) => {
+     e.preventDefault(); 
+     e.stopPropagation();  
     const f = e.target.files?.[0];
     if (!f) return;
 
@@ -28,6 +30,8 @@ export default function UploadControls({
   };
 
   const handleTextureChange = (e) => {
+     e.preventDefault(); 
+     e.stopPropagation();  
     const f = e.target.files?.[0];
     if (!f) return;
 
@@ -52,6 +56,7 @@ export default function UploadControls({
           type="file"
           accept=".glb,.gltf"
           onChange={handleFileChange}
+          onClick={(e) => (e.target.value = null)}  
           className="mt-2 block w-full text-sm text-gray-700"
         />
       </div>
@@ -65,6 +70,7 @@ export default function UploadControls({
           type="file"
           accept="image/*"
           onChange={handleTextureChange}
+           onClick={(e) => (e.target.value = null)}
           className="mt-2 block w-full text-sm text-gray-700"
         />
       </div>
