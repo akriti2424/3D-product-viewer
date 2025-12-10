@@ -1,58 +1,237 @@
-import React, { useEffect, useMemo } from "react";
+// src/components/ThreeViewer.jsx
+import React, { Suspense, useEffect , useState} from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF, Center, Html } from "@react-three/drei";
+import { OrbitControls, Center, useGLTF, useTexture, Html, Environment } from "@react-three/drei";
+import * as THREE from "three";
 
-function Model({ url, wireframe }) {
-  const gltf = useGLTF(url, true);
 
-  // toggle wireframe safely whenever `wireframe` or scene changes
+
+function Model({ url, wireframe, materialMode, textureUrl }) {
+  const { scene } = useGLTF(url);
+  const [texture, setTexture] = useState(null);
+
+  
   useEffect(() => {
-    if (!gltf?.scene) return;
-    gltf.scene.traverse((child) => {
-      if (child.isMesh && child.material) {
-        // Some models use an array of materials
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => (m.wireframe = !!wireframe));
-        } else {
-          child.material.wireframe = !!wireframe;
-          // ensure normal map / env map still show up on toggling
-          child.material.needsUpdate = true;
+    if (!textureUrl) {
+      setTexture((t) => {
+        if (t && typeof t.dispose === "function") t.dispose();
+        return null;
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+
+    loader.load(
+      textureUrl,
+      (tex) => {
+        if (cancelled) {
+          if (tex && typeof tex.dispose === "function") tex.dispose();
+          return;
+        }
+        tex.encoding = THREE.sRGBEncoding;
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, 1);
+        tex.needsUpdate = true;
+        setTexture(tex);
+      },
+      undefined,
+      (err) => {
+        console.warn("Texture load error:", err);
+        if (!cancelled) setTexture(null);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [textureUrl]);
+
+ 
+useEffect(() => {
+  if (!scene) return;
+
+  scene.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+
+    
+    child.castShadow = true;
+    child.receiveShadow = true;
+
+    
+    if (!child.userData.__origMaterial) {
+      try {
+        child.userData.__origMaterial = Array.isArray(child.material)
+          ? child.material.map((m) => m.clone())
+          : child.material.clone();
+      } catch {
+        child.userData.__origMaterial = child.material;
+      }
+    }
+
+    
+    const disposeIfTemp = (mat) => {
+      const orig = child.userData.__origMaterial;
+      const isOrig = (m) => {
+        if (!m || !orig) return false;
+        if (Array.isArray(orig)) return orig.includes(m);
+        return orig === m;
+      };
+      if (Array.isArray(mat)) {
+        mat.forEach((m) => { if (!isOrig(m) && m?.dispose) m.dispose(); });
+      } else {
+        if (!isOrig(mat) && mat?.dispose) mat.dispose();
+      }
+    };
+
+    // ---------- MATERIAL MODE SWITCH ----------
+    try {
+      if (materialMode === "standard") {
+        const mat = new THREE.MeshStandardMaterial({
+          color: child.material?.color ? child.material.color.clone() : new THREE.Color(0xffffff),
+          metalness: 0.05,
+          roughness: 0.6,
+          envMapIntensity: 1.0,
+        });
+        if (child.material?.map) {
+          mat.map = child.material.map;
+          if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
+        }
+        disposeIfTemp(child.userData.__currentMaterial);
+        child.material = mat;
+        child.userData.__currentMaterial = mat;
+
+      } else if (materialMode === "textured" && texture) {
+        const mat = new THREE.MeshStandardMaterial({
+          map: texture,
+          metalness: 0.05,
+          roughness: 0.5,
+        });
+        if (mat.map) {
+          mat.map.encoding = THREE.sRGBEncoding;
+          mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+          mat.map.repeat.set(1, 1);
+          mat.map.needsUpdate = true;
+        }
+        disposeIfTemp(child.userData.__currentMaterial);
+        child.material = mat;
+        child.userData.__currentMaterial = mat;
+
+      } else if (materialMode === "original") {
+        const orig = child.userData.__origMaterial;
+        disposeIfTemp(child.userData.__currentMaterial);
+        if (orig) {
+          child.material = Array.isArray(orig) ? orig.map((m) => m.clone()) : (orig.clone ? orig.clone() : orig);
+        }
+        child.userData.__currentMaterial = null;
+      }
+    } catch (e) {
+      console.warn("Material apply warning:", e);
+    }
+
+    
+    try {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((m) => {
+          if (m) {
+            m.wireframe = !!wireframe;
+            m.needsUpdate = true;
+          }
+        });
+      } else if (child.material) {
+        child.material.wireframe = !!wireframe;
+        child.material.needsUpdate = true;
+      }
+    } catch (e) {
+      console.warn("Wireframe apply warning:", e);
+    }
+
+   
+    if (child.userData.__wireframeHelper) {
+      if (!wireframe) {
+       
+        try {
+          child.remove(child.userData.__wireframeHelper);
+          const w = child.userData.__wireframeHelper;
+          if (w.geometry && typeof w.geometry.dispose === "function") w.geometry.dispose();
+          if (w.material && typeof w.material.dispose === "function") w.material.dispose();
+        } catch (err) { /* ignore */ }
+        child.userData.__wireframeHelper = null;
+      } else {
+        try {
+          child.userData.__wireframeHelper.visible = true;
+        } catch {}
+      }
+    } else {
+      if (wireframe) {
+        try {
+          const geo = new THREE.WireframeGeometry(child.geometry);
+          const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
+          const wire = new THREE.LineSegments(geo, mat);
+          wire.renderOrder = 999;
+          wire.frustumCulled = false;
+          child.add(wire);
+          child.userData.__wireframeHelper = wire;
+        } catch (err) {
+          
         }
       }
-    });
-  }, [gltf, wireframe]);
+    }
+  });
+}, [scene, wireframe, materialMode, texture]);
 
-  return <primitive object={gltf.scene} dispose={null} />;
+
+
+  return <primitive object={scene} dispose={null} />;
 }
 
-function Loader() {
-  return (
-    <Html center>
-      <div className="bg-white/90 p-3 rounded shadow text-sm">Loading model…</div>
-    </Html>
-  );
-}
 
-export default function ThreeViewer({ modelUrl, bgColor = "#ffffff", wireframe = false }) {
-  const canvasStyle = useMemo(() => ({ width: "100%", height: "60vh", background: bgColor }), [bgColor]);
 
+function ThreeViewer({ modelUrl, bgColor, wireframe, materialMode = "original", textureUrl }) {
   return (
-    <div className="w-full rounded overflow-hidden" style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.06)" }}>
-      <Canvas style={canvasStyle} camera={{ position: [0, 1.5, 3], fov: 50 }}>
+    <div style={{ width: "100%", height: "500px" }}>
+      <Canvas
+        shadows
+        camera={{ position: [2, 2, 2], fov: 55 }}
+        style={{ background: bgColor }}
+      >
         <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 10, 7]} intensity={0.8} />
-        <OrbitControls enablePan enableZoom enableRotate />
-        <React.Suspense fallback={<Loader />}>
-          {modelUrl ? (
+        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+
+        {/* Environment (HDRI-like tone) — BONUS FEATURE */}
+        <Environment preset="sunset" />
+
+        <Suspense
+          fallback={
+            <Html center>
+              <div style={{
+                padding: 10,
+                background: "rgba(255,255,255,0.9)",
+                borderRadius: 6,
+                fontSize: "14px"
+              }}>
+                Loading 3D Model…
+              </div>
+            </Html>
+          }
+        >
+          {modelUrl && (
             <Center>
-              <Model url={modelUrl} wireframe={wireframe} />
+              <Model
+                url={modelUrl}
+                wireframe={wireframe}
+                materialMode={materialMode}
+                textureUrl={textureUrl}
+              />
             </Center>
-          ) : null}
-        </React.Suspense>
+          )}
+        </Suspense>
+
+        <OrbitControls enableZoom enablePan enableRotate />
       </Canvas>
-      {!modelUrl && (
-        <div className="p-3 text-sm text-gray-600 bg-gray-50 border-t">No model loaded — upload a .glb / .gltf file.</div>
-      )}
     </div>
   );
 }
+
+export default ThreeViewer;
