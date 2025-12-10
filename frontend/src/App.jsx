@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from "react";
 import ThreeViewer from "./components/ThreeViewer";
 import UploadControls from "./components/uploadControls";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://threed-product-viewer-1.onrender.com";
+// App.jsx (top)
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "https://threed-product-viewer-1.onrender.com").replace(/\/$/, '');
+window.API_BASE = API_BASE; 
+
 
 
 export default function App() {
