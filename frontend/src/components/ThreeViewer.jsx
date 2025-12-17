@@ -1,13 +1,14 @@
 // src/components/ThreeViewer.jsx
 import React, { Suspense, useEffect , useState} from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Center, useGLTF, useTexture, Html, Environment } from "@react-three/drei";
+import { OrbitControls, Center, useGLTF, Html, Environment } from "@react-three/drei";
 import * as THREE from "three";
+useGLTF.setCrossOrigin("anonymous");
 
 
 
 function Model({ url, wireframe, materialMode, textureUrl }) {
-  const { scene } = useGLTF(url);
+  const { scene } = useGLTF(url,true);
   const [texture, setTexture] = useState(null);
 
   
