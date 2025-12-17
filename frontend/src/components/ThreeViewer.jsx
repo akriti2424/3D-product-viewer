@@ -3,7 +3,7 @@ import React, { Suspense, useEffect , useState} from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Center, useGLTF, Html, Environment } from "@react-three/drei";
 import * as THREE from "three";
-useGLTF.setCrossOrigin("anonymous");
+
 
 
 
